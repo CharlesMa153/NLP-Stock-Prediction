@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stock Sentiment Prediction</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 50px;
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    input {
+      font-size: 18px;
+      padding: 8px;
+      width: 200px;
+      margin-right: 10px;
+    }
+    button {
+      font-size: 18px;
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+    p {
+      font-size: 24px;
+      margin-top: 30px;
+      color: #34495e;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h1>Stock Sentiment Prediction</h1>
+  <input type="text" id="tickerInput" placeholder="Enter stock ticker (e.g. AAPL)" />
+  <button onclick="analyze()">Analyze</button>
+  <p id="result">Please enter a ticker symbol and click Analyze.</p>
+
+  <script>
+    async function analyze() {
+      const ticker = document.getElementById('tickerInput').value.trim();
+      if (!ticker) {
+        document.getElementById('result').innerText = "Ticker symbol is required.";
+        document.getElementById('result').classList.add('error');
+        return;
+      }
+      document.getElementById('result').innerText = "Analyzing...";
+      document.getElementById('result').classList.remove('error');
+
+      try {
+        const response = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          document.getElementById('result').innerText = `Error: ${data.error || 'Unknown error'}`;
+          document.getElementById('result').classList.add('error');
+          return;
+        }
+
+        document.getElementById('result').innerText =
+          `Ticker: ${ticker.toUpperCase()}\n` +
+          `Predicted Sentiment: ${data.prediction.toFixed(2)}\n` +
+          `Signal: ${data.signal}\n\n` +
+          `Headlines:\n- ${data.headlines.join('\n- ')}`;
+
+      } catch (error) {
+        document.getElementById('result').innerText = "Error: Could not fetch prediction.";
+        document.getElementById('result').classList.add('error');
+      }
+    }
+  </script>
+</body>
+</html>
