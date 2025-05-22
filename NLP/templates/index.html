@@ -43,13 +43,16 @@
   <script>
     async function analyze() {
       const ticker = document.getElementById('tickerInput').value.trim();
+      const resultEl = document.getElementById('result');
+
       if (!ticker) {
-        document.getElementById('result').innerText = "Ticker symbol is required.";
-        document.getElementById('result').classList.add('error');
+        resultEl.innerText = "Ticker symbol is required.";
+        resultEl.classList.add('error');
         return;
       }
-      document.getElementById('result').innerText = "Analyzing...";
-      document.getElementById('result').classList.remove('error');
+
+      resultEl.innerText = "Analyzing...";
+      resultEl.classList.remove('error');
 
       try {
         const response = await fetch('/analyze', {
@@ -61,20 +64,19 @@
         const data = await response.json();
 
         if (!response.ok) {
-          document.getElementById('result').innerText = `Error: ${data.error || 'Unknown error'}`;
-          document.getElementById('result').classList.add('error');
+          resultEl.innerText = `Error: ${data.error || 'Unknown error'}`;
+          resultEl.classList.add('error');
           return;
         }
 
-        document.getElementById('result').innerText =
+        resultEl.innerText =
           `Ticker: ${ticker.toUpperCase()}\n` +
           `Predicted Sentiment: ${data.prediction.toFixed(2)}\n` +
-          `Signal: ${data.signal}\n\n` +
-          `Headlines:\n- ${data.headlines.join('\n- ')}`;
+          `Signal: ${data.signal}`;
 
       } catch (error) {
-        document.getElementById('result').innerText = "Error: Could not fetch prediction.";
-        document.getElementById('result').classList.add('error');
+        resultEl.innerText = "Error: Could not fetch prediction.";
+        resultEl.classList.add('error');
       }
     }
   </script>

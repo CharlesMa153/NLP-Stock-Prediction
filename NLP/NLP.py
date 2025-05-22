@@ -21,7 +21,6 @@ def fetch_ticker_news(ticker):
     headers = {'User-Agent': 'Mozilla/5.0'}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
-    # Grab up to 20 headlines
     headlines = [h3.get_text(strip=True) for h3 in soup.select('h3.clamp.yf-1y7058a')][:20]
     return headlines if headlines else ["No news found"]
 
@@ -33,15 +32,13 @@ def get_sentiment_score(headlines):
     with torch.no_grad():
         outputs = model(**inputs)
     probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-    # FinBERT classes: [Negative, Neutral, Positive]
-    # We'll calculate sentiment as Positive probability minus Negative probability
-    scores = probs[:, 2] - probs[:, 0]  # positive - negative
+    scores = probs[:, 2] - probs[:, 0]
     avg_score = scores.mean().item()
     return avg_score
 
 def fetch_stock_data(ticker):
-    end = date.today() + timedelta(days=1)  # Include today if available
-    start = date.today() - timedelta(days=5)  # last 5 calendar days of stock data
+    end = date.today() + timedelta(days=1)
+    start = date.today() - timedelta(days=5)
     df = yf.download(ticker, start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'), progress=False)
     if df.empty or 'Close' not in df.columns:
         return None
@@ -53,11 +50,8 @@ def prepare_dataset(ticker):
     if stock_df is None or stock_df.empty:
         return None
 
-    # Get sentiment for latest 20 headlines (once)
     headlines = fetch_ticker_news(ticker)
     sentiment_score = get_sentiment_score(headlines)
-
-    # Assign the same sentiment score to all stock data dates (since headlines are not timestamped)
     stock_df['Sentiment_Score'] = sentiment_score
     return stock_df
 
@@ -92,16 +86,14 @@ def analyze():
         return jsonify({'error': 'Ticker symbol required'}), 400
 
     ticker = data['ticker'].upper()
-
     data_df = prepare_dataset(ticker)
+
     if data_df is None or len(data_df) < 2:
-        headlines = fetch_ticker_news(ticker)
-        return jsonify({'error': 'Not enough stock data for this ticker.', 'headlines': headlines}), 400
+        return jsonify({'error': 'Not enough stock data for this ticker.'}), 400
 
     X, y = create_sequences(data_df['Sentiment_Score'].values)
     if len(X) == 0:
-        headlines = fetch_ticker_news(ticker)
-        return jsonify({'error': 'Not enough data for sequence creation.', 'headlines': headlines}), 400
+        return jsonify({'error': 'Not enough data for sequence creation.'}), 400
 
     X = X.reshape((X.shape[0], X.shape[1], 1))
     model = build_and_train_model(X, y)
@@ -109,13 +101,10 @@ def analyze():
     prediction = model.predict(X[-1].reshape(1, X.shape[1], 1))[0][0]
     signal = "Buy" if prediction > 0 else "Sell"
 
-    headlines = fetch_ticker_news(ticker)  # fetch again for response
-
     return jsonify({
         'ticker': ticker,
         'prediction': float(prediction),
-        'signal': signal,
-        'headlines': headlines
+        'signal': signal
     })
 
 if __name__ == '__main__':
