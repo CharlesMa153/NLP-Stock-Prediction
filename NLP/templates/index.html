@@ -8,7 +8,9 @@
     body {
       font-family: Arial, sans-serif;
       text-align: center;
-      padding-top: 50px;
+      padding-top: 40px;
+      max-width: 900px;
+      margin: auto;
     }
     h1 {
       color: #2c3e50;
@@ -16,7 +18,7 @@
     input {
       font-size: 18px;
       padding: 8px;
-      width: 200px;
+      width: 220px;
       margin-right: 10px;
     }
     button {
@@ -24,13 +26,32 @@
       padding: 8px 16px;
       cursor: pointer;
     }
-    p {
-      font-size: 24px;
+    p, #signal {
+      font-size: 22px;
       margin-top: 30px;
       color: #34495e;
+      white-space: pre-line;
     }
     .error {
       color: red;
+    }
+    table {
+      margin: 30px auto;
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 700px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      font-size: 16px;
+    }
+    th {
+      background-color: #3498db;
+      color: white;
+    }
+    tbody tr:nth-child(even) {
+      background-color: #f2f2f2;
     }
   </style>
 </head>
@@ -39,20 +60,40 @@
   <input type="text" id="tickerInput" placeholder="Enter stock ticker (e.g. AAPL)" />
   <button onclick="analyze()">Analyze</button>
   <p id="result">Please enter a ticker symbol and click Analyze.</p>
+  <p id="signal"></p>
+
+  <table id="dataTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Closing Price (USD)</th>
+        <th>Sentiment Score</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <script>
     async function analyze() {
       const ticker = document.getElementById('tickerInput').value.trim();
       const resultEl = document.getElementById('result');
+      const signalEl = document.getElementById('signal');
+      const table = document.getElementById('dataTable');
+      const tbody = table.querySelector('tbody');
 
       if (!ticker) {
         resultEl.innerText = "Ticker symbol is required.";
         resultEl.classList.add('error');
+        table.style.display = 'none';
+        signalEl.innerText = '';
         return;
       }
 
       resultEl.innerText = "Analyzing...";
       resultEl.classList.remove('error');
+      signalEl.innerText = '';
+      table.style.display = 'none';
+      tbody.innerHTML = '';
 
       try {
         const response = await fetch('/analyze', {
@@ -69,14 +110,41 @@
           return;
         }
 
-        resultEl.innerText =
-          `Ticker: ${ticker.toUpperCase()}\n` +
-          `Predicted Sentiment: ${data.prediction.toFixed(2)}\n` +
-          `Signal: ${data.signal}`;
+        // Show main results
+        resultEl.innerText = `Ticker: ${ticker.toUpperCase()}\nPredicted Next Close Price: $${data.prediction.toFixed(2)}`;
+        signalEl.innerText = `Signal: ${data.signal}`;
+        signalEl.classList.remove('error');
+
+        // Populate and show the table
+        if (data.table_data && data.table_data.length > 0) {
+          tbody.innerHTML = '';
+          data.table_data.forEach(row => {
+            const tr = document.createElement('tr');
+
+            const dateTd = document.createElement('td');
+            dateTd.textContent = row.date;
+            tr.appendChild(dateTd);
+
+            const closeTd = document.createElement('td');
+            closeTd.textContent = row.close.toFixed(2);
+            tr.appendChild(closeTd);
+
+            const sentimentTd = document.createElement('td');
+            sentimentTd.textContent = row.sentiment.toFixed(4);
+            tr.appendChild(sentimentTd);
+
+            tbody.appendChild(tr);
+          });
+          table.style.display = 'table';
+        } else {
+          table.style.display = 'none';
+        }
 
       } catch (error) {
         resultEl.innerText = "Error: Could not fetch prediction.";
         resultEl.classList.add('error');
+        table.style.display = 'none';
+        signalEl.innerText = '';
       }
     }
   </script>
