@@ -10,6 +10,7 @@ from datetime import date, timedelta
 from flask import Flask, render_template, jsonify, request
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
+from sklearn.preprocessing import MinMaxScaler
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 
@@ -18,39 +19,54 @@ model = AutoModelForSequenceClassification.from_pretrained("yiyanghkust/finbert-
 
 app = Flask(__name__, template_folder='templates')
 
-def fetch_ticker_news(ticker, total_headlines=150):
+def fetch_ticker_news(ticker, max_headlines=500):
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     driver = webdriver.Chrome(options=options)
-    
+
     url = f'https://finance.yahoo.com/quote/{ticker}/news'
     driver.get(url)
 
-    headlines = set()
+    headlines = []
+    seen = set()
     scroll_pause_time = 2
     last_height = driver.execute_script("return document.body.scrollHeight")
-    
-    while len(headlines) < total_headlines:
+
+    while len(headlines) < max_headlines:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(scroll_pause_time)
-        
+
         elems = driver.find_elements(By.CSS_SELECTOR, 'h3.clamp')
         for elem in elems:
             text = elem.text.strip()
-            if text:
-                headlines.add(text)
-            if len(headlines) >= total_headlines:
-                break
-        
+            if text and text not in seen:
+                headlines.append(text)
+                seen.add(text)
+
         new_height = driver.execute_script("return document.body.scrollHeight")
         if new_height == last_height:
             break
         last_height = new_height
 
     driver.quit()
-    return list(headlines)[:total_headlines]
+    return headlines
+
+def assign_headlines_to_days(headlines, num_days):
+    total = len(headlines)
+    base = total // num_days
+    remainder = total % num_days
+
+    daily_chunks = []
+    start_idx = 0
+
+    for i in range(num_days):
+        count = base + (1 if i < remainder else 0)
+        daily_chunks.append(headlines[start_idx:start_idx + count])
+        start_idx += count
+
+    return daily_chunks
 
 def get_sentiment_score(headlines):
     if not headlines or headlines == ["No news found"]:
@@ -65,7 +81,7 @@ def get_sentiment_score(headlines):
 
 def fetch_stock_data(ticker, days=15):
     end = date.today() + timedelta(days=1)
-    start = date.today() - timedelta(days=days*2)  # buffer for weekends/holidays
+    start = date.today() - timedelta(days=days*2)
     df = yf.download(ticker, start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'), progress=False)
     if df.empty or 'Close' not in df.columns:
         return None
@@ -77,27 +93,24 @@ def fetch_stock_data(ticker, days=15):
 
 def prepare_dataset(ticker):
     days = 15
-    headlines_per_day = 10
-    total_headlines = days * headlines_per_day
-    
+
     stock_df = fetch_stock_data(ticker, days=days)
     if stock_df is None or stock_df.empty:
-        return None
+        return None, 0
 
-    headlines = fetch_ticker_news(ticker, total_headlines=total_headlines)
-    if headlines == ["No news found"] or len(headlines) < total_headlines:
-        return None
+    headlines = fetch_ticker_news(ticker, max_headlines=500)
+    if not headlines or len(headlines) < days:
+        return None, len(headlines)
+
+    daily_chunks = assign_headlines_to_days(headlines, days)
 
     daily_sentiments = []
-    for day_idx in range(days):
-        start_idx = day_idx * headlines_per_day
-        end_idx = start_idx + headlines_per_day
-        daily_chunk = headlines[start_idx:end_idx]
-        sentiment = get_sentiment_score(daily_chunk)
+    for chunk in daily_chunks:
+        sentiment = get_sentiment_score(chunk)
         daily_sentiments.append(sentiment)
 
     stock_df['Sentiment_Score'] = daily_sentiments
-    return stock_df
+    return stock_df, len(headlines)
 
 def create_sequences(data, window_size=3):
     X, y = [], []
@@ -130,34 +143,43 @@ def analyze():
         return jsonify({'error': 'Ticker symbol required'}), 400
 
     ticker = data['ticker'].upper()
-    data_df = prepare_dataset(ticker)
+    data_df, headline_count = prepare_dataset(ticker)
 
     if data_df is None or data_df.empty or len(data_df) < 4:
         return jsonify({'error': 'Not enough stock or sentiment data for this ticker.'}), 400
 
     features = data_df[['Close', 'Sentiment_Score']].values
-    X, y = create_sequences(features, window_size=3)
+
+    # Scale features
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    features_scaled = scaler.fit_transform(features)
+
+    X, y = create_sequences(features_scaled, window_size=3)
     if len(X) == 0:
         return jsonify({'error': 'Not enough data for sequence creation.'}), 400
 
     X = X.reshape((X.shape[0], X.shape[1], X.shape[2]))
-    y = y[:, 0]  # predict next day close price
+    y = y[:, 0]  # We predict Close price only (scaled)
 
     try:
         trained_model = build_and_train_model(X, y)
-        prediction = trained_model.predict(X[-1].reshape(1, X.shape[1], X.shape[2]))[0][0]
+        pred_scaled = trained_model.predict(X[-1].reshape(1, X.shape[1], X.shape[2]))[0][0]
     except Exception as e:
         return jsonify({'error': f'Model training or prediction failed: {e}'}), 500
+
+    # Invert scaling for predicted Close price only (feature index 0)
+    close_min = scaler.data_min_[0]
+    close_max = scaler.data_max_[0]
+    prediction = pred_scaled * (close_max - close_min) + close_min
 
     latest_close = float(data_df['Close'].iloc[-1])
     signal = "Buy" if prediction > latest_close else "Sell"
 
-    # Prepare data for the table: convert dates to strings
     data_table = []
     for _, row in data_df.iterrows():
         date_val = row['Date']
         if isinstance(date_val, pd.Series):
-            date_val = date_val.iloc[0]  # get scalar timestamp
+            date_val = date_val.iloc[0]
         data_table.append({
             'date': date_val.strftime('%Y-%m-%d'),
             'close': round(float(row['Close']), 2),
@@ -168,6 +190,7 @@ def analyze():
         'ticker': ticker,
         'prediction': round(float(prediction), 4),
         'signal': signal,
+        'headline_count': headline_count,
         'table_data': data_table
     })
 

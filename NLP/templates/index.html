@@ -26,7 +26,7 @@
       padding: 8px 16px;
       cursor: pointer;
     }
-    p, #signal {
+    p, #signal, #headlineCount {
       font-size: 22px;
       margin-top: 30px;
       color: #34495e;
@@ -60,6 +60,7 @@
   <input type="text" id="tickerInput" placeholder="Enter stock ticker (e.g. AAPL)" />
   <button onclick="analyze()">Analyze</button>
   <p id="result">Please enter a ticker symbol and click Analyze.</p>
+  <p id="headlineCount"></p>
   <p id="signal"></p>
 
   <table id="dataTable" style="display:none;">
@@ -78,6 +79,7 @@
       const ticker = document.getElementById('tickerInput').value.trim();
       const resultEl = document.getElementById('result');
       const signalEl = document.getElementById('signal');
+      const headlineCountEl = document.getElementById('headlineCount');
       const table = document.getElementById('dataTable');
       const tbody = table.querySelector('tbody');
 
@@ -86,12 +88,14 @@
         resultEl.classList.add('error');
         table.style.display = 'none';
         signalEl.innerText = '';
+        headlineCountEl.innerText = '';
         return;
       }
 
       resultEl.innerText = "Analyzing...";
       resultEl.classList.remove('error');
       signalEl.innerText = '';
+      headlineCountEl.innerText = '';
       table.style.display = 'none';
       tbody.innerHTML = '';
 
@@ -114,6 +118,9 @@
         resultEl.innerText = `Ticker: ${ticker.toUpperCase()}\nPredicted Next Close Price: $${data.prediction.toFixed(2)}`;
         signalEl.innerText = `Signal: ${data.signal}`;
         signalEl.classList.remove('error');
+
+        // Show headline count
+        headlineCountEl.innerText = `Headlines Fetched: ${data.headline_count}`;
 
         // Populate and show the table
         if (data.table_data && data.table_data.length > 0) {
@@ -145,6 +152,7 @@
         resultEl.classList.add('error');
         table.style.display = 'none';
         signalEl.innerText = '';
+        headlineCountEl.innerText = '';
       }
     }
   </script>

@@ -1,36 +1,56 @@
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 import time
 
-def fetch_ticker_news_selenium(ticker, total_headlines=30):
-    url = f'https://finance.yahoo.com/quote/{ticker}/news'
-
+def fetch_ticker_news_ordered(ticker, total_headlines):
     options = Options()
-    options.headless = True  # Run Chrome in headless mode (no GUI)
-
-    # Make sure you have chromedriver installed and in your PATH
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
     driver = webdriver.Chrome(options=options)
+    
+    url = f'https://finance.yahoo.com/quote/{ticker}/news'
     driver.get(url)
 
-    # Wait for page to load JS content (adjust sleep time if needed)
-    time.sleep(5)
-
-    # Grab headline elements by CSS selector
-    elements = driver.find_elements(By.CSS_SELECTOR, 'h3')
-
-    print(f"Found {len(elements)} headline elements (raw)")
-
-    # Extract text, limit to total_headlines
-    headlines = [el.text for el in elements if el.text.strip()][:total_headlines]
-
-    print(f"Returning {len(headlines)} headlines:")
-    for i, h in enumerate(headlines[:5]):
-        print(f"{i+1}. {h}")
+    headlines = []
+    seen = set()
+    scroll_pause_time = 2
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    
+    while len(headlines) < total_headlines:
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(scroll_pause_time)
+        
+        elems = driver.find_elements(By.CSS_SELECTOR, 'h3.clamp')
+        for elem in elems:
+            text = elem.text.strip()
+            if text and text not in seen:
+                headlines.append(text)
+                seen.add(text)
+            if len(headlines) >= total_headlines:
+                break
+        
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            break
+        last_height = new_height
 
     driver.quit()
-    return headlines if headlines else ["No news found"]
+    return headlines[:total_headlines]
 
-if __name__ == '__main__':
-    ticker = 'AAPL'  # Example ticker
-    fetch_ticker_news_selenium(ticker)
+
+if __name__ == "__main__":
+    ticker = input("Enter ticker symbol (e.g., AAPL): ").upper()
+    days = 15
+    headlines_per_day = 12
+    total_headlines = days * headlines_per_day
+
+    print(f"Fetching {total_headlines} headlines for ticker '{ticker}'...")
+
+    headlines = fetch_ticker_news(ticker, total_headlines)
+    print(f"\nNumber of headlines fetched: {len(headlines)}\n")
+
+    print("First 30 headlines (or fewer if less available):\n")
+    for i, headline in enumerate(headlines, start=1):
+        print(f"{i}. {headline}")
