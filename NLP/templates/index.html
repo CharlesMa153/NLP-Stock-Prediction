@@ -69,6 +69,8 @@
         <th>Date</th>
         <th>Closing Price (USD)</th>
         <th>Sentiment Score</th>
+        <th>Predicted Close (USD)</th>
+        <th>Difference (Actual - Predicted)</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -139,6 +141,18 @@
             const sentimentTd = document.createElement('td');
             sentimentTd.textContent = row.sentiment.toFixed(4);
             tr.appendChild(sentimentTd);
+
+            const predictedTd = document.createElement('td');
+            predictedTd.textContent = row.predicted_close !== null && row.predicted_close !== undefined 
+              ? row.predicted_close.toFixed(2) 
+              : 'N/A';
+            tr.appendChild(predictedTd);
+
+            const diffTd = document.createElement('td');
+            diffTd.textContent = row.difference !== null && row.difference !== undefined
+              ? row.difference.toFixed(4)
+              : 'N/A';
+            tr.appendChild(diffTd);
 
             tbody.appendChild(tr);
           });
