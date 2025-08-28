@@ -124,9 +124,9 @@ def create_sequences(data, window_size=3):
 
 def build_and_train_model(X, y):
     model = Sequential([
-        LSTM(25, return_sequences=False, input_shape=(X.shape[1], X.shape[2])),  # smaller LSTM
-        Dropout(0.4),  # higher dropout
-        Dense(15, activation='relu'),  # smaller dense layer with activation
+        LSTM(25, return_sequences=False, input_shape=(X.shape[1], X.shape[2])),
+        Dropout(0.4),  
+        Dense(15, activation='relu'),
         Dense(1)
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
