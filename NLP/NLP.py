@@ -13,6 +13,7 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout
 from sklearn.preprocessing import MinMaxScaler
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
+import matplotlib.pyplot as plt
 
 tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone")
 model = AutoModelForSequenceClassification.from_pretrained("yiyanghkust/finbert-tone")
@@ -123,15 +124,22 @@ def create_sequences(data, window_size=3):
 
 def build_and_train_model(X, y):
     model = Sequential([
-        LSTM(50, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
-        Dropout(0.2),
-        LSTM(50),
-        Dropout(0.2),
-        Dense(25),
+        LSTM(25, return_sequences=False, input_shape=(X.shape[1], X.shape[2])),  # smaller LSTM
+        Dropout(0.4),  # higher dropout
+        Dense(15, activation='relu'),  # smaller dense layer with activation
         Dense(1)
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
-    model.fit(X, y, epochs=20, batch_size=1, validation_split=0.2, verbose=0)
+    history = model.fit(X, y, epochs=15, batch_size=1, validation_split=0.2, verbose=1)
+    
+    # Plot training vs validation loss
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training vs Validation Loss')
+    plt.legend()
+    plt.show()
     return model
 
 @app.route('/')
